@@ -1,4 +1,5 @@
 package com.yizhigou.seckill.service.impl;
+import java.util.Date;
 import java.util.List;
 
 import com.yizhigou.com.yizhigou.seckill.service.SeckillOrderService;
@@ -165,5 +166,66 @@ public class SeckillOrderServiceImpl implements SeckillOrderService {
 		//存入数据库
 		redisTemplate.boundHashOps("seckillOrder").put(userId, seckillOrder);
 	}
+
+	/**
+	 * 根据用户名查询秒杀订单
+	 * @param userId
+	 */
+	@Override
+	public TbSeckillOrder searchOrderFromRedisByUserId(String userId) {
+		return (TbSeckillOrder) redisTemplate.boundHashOps("seckillOrder").get(userId);
+	}
+
+
+    /**
+     * 支付成功保存订单
+     * @param userId
+     * @param orderId
+     */
+    @Override
+    public void saveOrderFromRedisToDb(String userId, Long orderId, String transactionId) {
+        System.out.println("saveOrderFromRedisToDb:"+userId);
+        //根据用户ID查询日志
+        TbSeckillOrder seckillOrder = (TbSeckillOrder) redisTemplate.boundHashOps("seckillOrder").get(userId);
+        if(seckillOrder==null){
+            throw new RuntimeException("订单不存在");
+        }
+        //如果与传递过来的订单号不符
+        if(seckillOrder.getId().longValue()!=orderId.longValue()){
+            throw new RuntimeException("订单不相符");
+        }
+        seckillOrder.setTransactionId(transactionId);//交易流水号
+        seckillOrder.setPayTime(new Date());//支付时间
+        seckillOrder.setStatus("1");//状态
+        seckillOrderMapper.insert(seckillOrder);//保存到数据库
+        redisTemplate.boundHashOps("seckillOrder").delete(userId);//从redis中清除
+
+    }
+
+    /**
+     * 从缓存中删除订单
+     * @param userId
+     * @param orderId
+     */
+    @Override
+    public void deleteOrderFromRedis(String userId, Long orderId) {
+        //1.根据用户id取出订单
+        TbSeckillOrder seckillOrder = (TbSeckillOrder) redisTemplate.boundHashOps("seckillOrder").get(userId);
+        //2。取出订单后，删除订单信息
+        if(seckillOrder!=null  &&  seckillOrder.getId().longValue()==orderId.longValue()){
+            redisTemplate.boundHashOps("seckillOrder").delete(userId);//删除缓存中的订单
+            //恢复库存
+            //1.从缓存中提取秒杀商品
+            TbSeckillGoods seckillGoods=(TbSeckillGoods)redisTemplate.boundHashOps("seckillGoods").get(seckillOrder.getSeckillId());
+            //3。跟新库存
+            if(seckillGoods!=null){
+                seckillGoods.setStockCount(seckillGoods.getStockCount()+1);
+                redisTemplate.boundHashOps("seckillGoods").put(seckillOrder.getSeckillId(), seckillGoods);//存入缓存
+            }
+
+
+        }
+
+    }
 
 }
