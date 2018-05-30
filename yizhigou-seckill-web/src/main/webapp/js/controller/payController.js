@@ -27,7 +27,7 @@ app.controller('payController' ,function($scope ,payService,$location) {
                     location.href="paysuccess.html#?money="+$scope.money;
                 }else{
                     if(response.message=='二维码超时'){
-                        $scope.createNative();//重新生成二维码
+                        location.href="payTimeOut.html";
                     }else{
                         location.href="payfail.html";
                     }
